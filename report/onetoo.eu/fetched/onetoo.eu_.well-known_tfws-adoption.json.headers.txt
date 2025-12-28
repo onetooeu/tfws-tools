@@ -1,0 +1,26 @@
+HTTP/1.1 301 Moved Permanently
+Date: Sun, 28 Dec 2025 06:58:52 GMT
+Content-Length: 0
+Connection: keep-alive
+Location: https://www.onetoo.eu/.well-known/tfws-adoption.json
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=8RhyihunOl%2FScM%2FOJakyttQoiGYgPAv6PL5%2FDKubYd%2FdNKgRM3WD3ZsKMiVzIkIVu3tPAvg74k%2FNQbEaCPwvYjgbBwWlhE1mcg%3D%3D"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+Server: cloudflare
+CF-RAY: 9b4f2bf54d9446d5-BTS
+
+HTTP/1.1 404 Not Found
+Date: Sun, 28 Dec 2025 06:58:52 GMT
+Content-Type: text/html; charset=utf-8
+Transfer-Encoding: chunked
+Connection: keep-alive
+Access-Control-Allow-Origin: *
+Cache-Control: no-store
+referrer-policy: strict-origin-when-cross-origin
+x-content-type-options: nosniff
+Vary: accept-encoding
+Report-To: {"group":"cf-nel","max_age":604800,"endpoints":[{"url":"https://a.nel.cloudflare.com/report/v4?s=hBgc2Foyb5ybaELD0YeXL78lt1V4kijWJ8lXJQhzEvzEIpbF0If0KhKlzY64zL66upvUUqyTFJS3jnY4wo6uesn5IMPaiEf7%2FAroH7o%3D"}]}
+Nel: {"report_to":"cf-nel","success_fraction":0.0,"max_age":604800}
+Server: cloudflare
+cf-cache-status: DYNAMIC
+CF-RAY: 9b4f2bf60d566495-BTS
+alt-svc: h3=":443"; ma=86400
