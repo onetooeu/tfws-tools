@@ -1,0 +1,7 @@
+# Local outputs
+report/
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db
