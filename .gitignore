@@ -5,3 +5,4 @@ report/
 # OS / editor
 .DS_Store
 Thumbs.db
+out/
