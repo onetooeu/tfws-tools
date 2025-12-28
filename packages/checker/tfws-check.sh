@@ -155,20 +155,22 @@ for p in "${PATHS[@]}"; do
     fi
   fi
 
-  # Build JSON row
+  # Build JSON row (NO bash ${...} inside python; safe json.dumps)
   checks_json="$(python - <<PY
 import json
-checks=json.loads('''$checks_json''')
+checks = json.loads('''$checks_json''')
+fetched_file = ${json.dumps(fetched_file)}
+validation_output = ${json.dumps(validation_output)}
 checks.append({
   "path": "$p",
   "url": "$url",
   "http_status": int($status),
   "content_type": "$ctype",
-  "fetched_file": ${f'"{fetched_file}"' if fetched_file else "null"},
+  "fetched_file": fetched_file if fetched_file else None,
   "validated": "$validated_md",
   "grade": "$final_grade",
   "validation_ok": $validation_ok,
-  "validation_output": ${json.dumps(validation_output)},
+  "validation_output": validation_output,
 })
 print(json.dumps(checks, ensure_ascii=False, indent=2))
 PY
@@ -181,8 +183,8 @@ done
 # Write report.json
 cat > "${OUTDIR}/report.json" <<EOF
 {
-  "domain": "$(json_escape "$DOMAIN")",
-  "checked_at_utc": "$(json_escape "$timestamp_utc")",
+  "domain": $(json_escape "$DOMAIN"),
+  "checked_at_utc": $(json_escape "$timestamp_utc"),
   "non_authoritative": true,
   "legend": {
     "OK": "Endpoint reachable and (if JSON) basic validation passed with no warnings.",
