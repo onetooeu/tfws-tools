@@ -14,7 +14,6 @@ mkdir -p "${FETCHDIR}"
 
 timestamp_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
-# Endpoints we check (no scoring; only availability + basic HTTP info)
 declare -a PATHS=(
   "/.well-known/minisign.pub"
   "/.well-known/llms.txt"
@@ -26,44 +25,27 @@ declare -a PATHS=(
 check_url () {
   local url="$1"
   local headers
-  headers="$(curl -sS -D - -o /dev/null -L --max-time 20 "$url" || true)"
+  headers="$(curl -sS -L -D - -o /dev/null --max-time 20 "$url" || true)"
 
   local status
-  status="$(printf "%s" "$headers" | awk 'toupper($0) ~ /^HTTP\/[0-9.]+/ {print $2; exit}' )"
+  status="$(printf "%s" "$headers" | awk 'toupper($0) ~ /^HTTP\/[0-9.]+/ {code=$2} END{print code+0}' )"
   [[ -z "$status" ]] && status="0"
-
-  local ctype
-  ctype="$(printf "%s" "$headers" | awk -F': ' 'tolower($1)=="content-type"{print $2; exit}' | tr -d '\r')"
-  [[ -z "$ctype" ]] && ctype=""
 
   local safe
   safe="$(echo "$url" | sed 's#https\?://##' | sed 's#[/:]#_#g')"
   printf "%s" "$headers" > "${FETCHDIR}/${safe}.headers.txt"
 
-  echo "$status|$ctype"
-}
-
-json_escape () {
-  python - <<'PY' "$1"
-import json,sys
-print(json.dumps(sys.argv[1]))
-PY
+  echo "$status"
 }
 
 run_validator () {
   local file="$1"
-  if command -v python >/dev/null 2>&1; then
-    python packages/validator/tfws-validate.py "$file" 2>&1
-  else
-    echo "ERROR: python not found; cannot validate"
-    return 1
-  fi
+  python packages/validator/tfws-validate.py "$file" 2>&1
 }
 
 results_json="${OUTDIR}/report.json"
 results_md="${OUTDIR}/report.md"
 
-# Build JSON report
 {
   echo "{"
   echo "  \"domain\": \"${DOMAIN}\","
@@ -74,24 +56,19 @@ results_md="${OUTDIR}/report.md"
 
   for p in "${PATHS[@]}"; do
     url="${BASE}${p}"
-    res="$(check_url "$url")"
-    status="${res%%|*}"
-    ctype="${res#*|}"
+    status="$(check_url "$url")"
 
     fetched=""
     validation=""
     validation_ok=""
 
     if [[ "$status" == "200" ]]; then
-      # Save body (cap at 1MB)
       target="${FETCHDIR}${p}"
       mkdir -p "$(dirname "$target")"
       if curl -sS -L --max-time 25 "$url" | head -c 1048576 > "$target"; then
         fetched="fetched${p}"
 
-        # Validate JSON files we care about
         if [[ "$p" == *".json" ]]; then
-          # capture validator output; do not fail whole run
           validation="$(run_validator "$target" || true)"
           if echo "$validation" | grep -q '^OK:'; then
             validation_ok="true"
@@ -111,10 +88,9 @@ results_md="${OUTDIR}/report.md"
     echo "      \"path\": \"${p}\","
     echo "      \"url\": \"${url}\","
     echo "      \"http_status\": ${status},"
-    echo "      \"content_type\": $(json_escape "$ctype"),"
-    echo "      \"fetched_file\": $(json_escape "$fetched"),"
-    echo "      \"validation_ok\": $(json_escape "$validation_ok"),"
-    echo "      \"validation_output\": $(json_escape "$validation")"
+    echo "      \"fetched_file\": \"${fetched}\","
+    echo "      \"validation_ok\": \"${validation_ok}\","
+    echo "      \"validation_output\": $(python -c "import json,sys; print(json.dumps(sys.stdin.read()))" <<< "$validation")"
     echo -n "    }"
   done
 
@@ -123,7 +99,6 @@ results_md="${OUTDIR}/report.md"
   echo "}"
 } > "$results_json"
 
-# Build Markdown summary
 {
   echo "# TFWS Checker Report"
   echo
@@ -137,8 +112,7 @@ results_md="${OUTDIR}/report.md"
 
   for p in "${PATHS[@]}"; do
     url="${BASE}${p}"
-    res="$(check_url "$url")"
-    status="${res%%|*}"
+    status="$(check_url "$url")"
 
     validated="(n/a)"
     if [[ "$p" == *".json" && "$status" == "200" ]]; then
