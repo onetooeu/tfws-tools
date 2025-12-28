@@ -1,3 +1,7 @@
+![Status](https://img.shields.io/badge/status-stable_v0.1.0-brightgreen)
+![License](https://img.shields.io/badge/license-CC0-lightgrey)
+![Signed](https://img.shields.io/badge/artifact-signed_minisign-blue)
+
 # TFWS Tools (onetooeu/tfws-tools)
 
 Non-authoritative, offline-first tools for adopting  
@@ -154,3 +158,6 @@ License
 CC0 / Public Domain.
 
 This work is dedicated to the public domain.
+
+[![Signed](https://img.shields.io/badge/artifact-signed_minisign-blue)](https://github.com/onetooeu/tfws-tools/releases/tag/v0.1.0)
+
