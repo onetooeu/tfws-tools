@@ -155,23 +155,42 @@ for p in "${PATHS[@]}"; do
     fi
   fi
 
-  # Build JSON row (NO bash ${...} inside python; safe json.dumps)
-  checks_json="$(python - <<PY
-import json
-checks = json.loads('''$checks_json''')
-fetched_file = ${json.dumps(fetched_file)}
-validation_output = ${json.dumps(validation_output)}
+  # Build JSON row (safe: pass values via argv; no bash ${} inside python heredoc)
+  checks_json="$(python - "$checks_json" "$p" "$url" "$status" "$ctype" "$fetched_file" "$validated_md" "$final_grade" "$validation_ok" "$validation_output" <<'PY'
+import json, sys
+
+checks_json = sys.argv[1]
+p = sys.argv[2]
+url = sys.argv[3]
+status = int(sys.argv[4])
+ctype = sys.argv[5]
+fetched_file = sys.argv[6]
+validated_md = sys.argv[7]
+final_grade = sys.argv[8]
+validation_ok_raw = sys.argv[9]
+validation_output = sys.argv[10]
+
+checks = json.loads(checks_json)
+
+if validation_ok_raw == "true":
+    validation_ok = True
+elif validation_ok_raw == "false":
+    validation_ok = False
+else:
+    validation_ok = None
+
 checks.append({
-  "path": "$p",
-  "url": "$url",
-  "http_status": int($status),
-  "content_type": "$ctype",
+  "path": p,
+  "url": url,
+  "http_status": status,
+  "content_type": ctype,
   "fetched_file": fetched_file if fetched_file else None,
-  "validated": "$validated_md",
-  "grade": "$final_grade",
-  "validation_ok": $validation_ok,
+  "validated": validated_md,
+  "grade": final_grade,
+  "validation_ok": validation_ok,
   "validation_output": validation_output,
 })
+
 print(json.dumps(checks, ensure_ascii=False, indent=2))
 PY
 )"
