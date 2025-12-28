@@ -9,7 +9,8 @@ fi
 
 BASE="https://${DOMAIN}"
 OUTDIR="report/${DOMAIN}"
-mkdir -p "${OUTDIR}/fetched"
+FETCHDIR="${OUTDIR}/fetched"
+mkdir -p "${FETCHDIR}"
 
 timestamp_utc="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
 
@@ -24,24 +25,20 @@ declare -a PATHS=(
 
 check_url () {
   local url="$1"
-  # Fetch headers; don't fail the whole run on a single missing file
   local headers
-  headers="$(curl -sS -D - -o /dev/null -L --max-time 15 "$url" || true)"
+  headers="$(curl -sS -D - -o /dev/null -L --max-time 20 "$url" || true)"
 
-  # Extract status code from first HTTP line that appears
   local status
   status="$(printf "%s" "$headers" | awk 'toupper($0) ~ /^HTTP\/[0-9.]+/ {print $2; exit}' )"
   [[ -z "$status" ]] && status="0"
 
-  # Extract content-type if any
   local ctype
   ctype="$(printf "%s" "$headers" | awk -F': ' 'tolower($1)=="content-type"{print $2; exit}' | tr -d '\r')"
   [[ -z "$ctype" ]] && ctype=""
 
-  # Save headers for debugging
   local safe
   safe="$(echo "$url" | sed 's#https\?://##' | sed 's#[/:]#_#g')"
-  printf "%s" "$headers" > "${OUTDIR}/fetched/${safe}.headers.txt"
+  printf "%s" "$headers" > "${FETCHDIR}/${safe}.headers.txt"
 
   echo "$status|$ctype"
 }
@@ -51,6 +48,16 @@ json_escape () {
 import json,sys
 print(json.dumps(sys.argv[1]))
 PY
+}
+
+run_validator () {
+  local file="$1"
+  if command -v python >/dev/null 2>&1; then
+    python packages/validator/tfws-validate.py "$file" 2>&1
+  else
+    echo "ERROR: python not found; cannot validate"
+    return 1
+  fi
 }
 
 results_json="${OUTDIR}/report.json"
@@ -64,18 +71,36 @@ results_md="${OUTDIR}/report.md"
   echo "  \"base_url\": \"${BASE}\","
   echo "  \"checks\": ["
   first=1
+
   for p in "${PATHS[@]}"; do
     url="${BASE}${p}"
     res="$(check_url "$url")"
     status="${res%%|*}"
     ctype="${res#*|}"
 
-    # Attempt to fetch body for 200 responses (small only)
     fetched=""
+    validation=""
+    validation_ok=""
+
     if [[ "$status" == "200" ]]; then
-      # Keep max 1MB for safety
-      if curl -sS -L --max-time 20 "$url" | head -c 1048576 > "${OUTDIR}/fetched$(echo "$p")"; then
+      # Save body (cap at 1MB)
+      target="${FETCHDIR}${p}"
+      mkdir -p "$(dirname "$target")"
+      if curl -sS -L --max-time 25 "$url" | head -c 1048576 > "$target"; then
         fetched="fetched${p}"
+
+        # Validate JSON files we care about
+        if [[ "$p" == *".json" ]]; then
+          # capture validator output; do not fail whole run
+          validation="$(run_validator "$target" || true)"
+          if echo "$validation" | grep -q '^OK:'; then
+            validation_ok="true"
+          elif echo "$validation" | grep -q '^ERROR:'; then
+            validation_ok="false"
+          else
+            validation_ok=""
+          fi
+        fi
       fi
     fi
 
@@ -87,15 +112,18 @@ results_md="${OUTDIR}/report.md"
     echo "      \"url\": \"${url}\","
     echo "      \"http_status\": ${status},"
     echo "      \"content_type\": $(json_escape "$ctype"),"
-    echo "      \"fetched_file\": $(json_escape "$fetched")"
+    echo "      \"fetched_file\": $(json_escape "$fetched"),"
+    echo "      \"validation_ok\": $(json_escape "$validation_ok"),"
+    echo "      \"validation_output\": $(json_escape "$validation")"
     echo -n "    }"
   done
+
   echo
   echo "  ]"
   echo "}"
 } > "$results_json"
 
-# Build a simple Markdown summary
+# Build Markdown summary
 {
   echo "# TFWS Checker Report"
   echo
@@ -104,20 +132,37 @@ results_md="${OUTDIR}/report.md"
   echo
   echo "## Endpoints"
   echo
-  echo "| Path | Status | Content-Type |"
+  echo "| Path | Status | Validated |"
   echo "|---|---:|---|"
+
   for p in "${PATHS[@]}"; do
     url="${BASE}${p}"
     res="$(check_url "$url")"
     status="${res%%|*}"
-    ctype="${res#*|}"
-    echo "| \`${p}\` | \`${status}\` | \`${ctype}\` |"
+
+    validated="(n/a)"
+    if [[ "$p" == *".json" && "$status" == "200" ]]; then
+      target="${FETCHDIR}${p}"
+      if [[ -f "$target" ]]; then
+        out="$(run_validator "$target" || true)"
+        if echo "$out" | grep -q '^OK:'; then
+          validated="OK"
+        elif echo "$out" | grep -q '^ERROR:'; then
+          validated="ERROR"
+        else
+          validated="WARN"
+        fi
+      fi
+    fi
+
+    echo "| \`${p}\` | \`${status}\` | \`${validated}\` |"
   done
+
   echo
   echo "## Notes"
   echo
   echo "- This tool is **non-authoritative**: it does not certify or score trust."
-  echo "- It reports availability and basic HTTP metadata only."
+  echo "- It reports availability + basic validation only."
 } > "$results_md"
 
 echo "OK: wrote ${results_json}"
